@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>サウナ会員ランクシミュレーター（1ヶ月ローリング版）</title>
+    <style>
+        :root {
+            --primary: #8B4513;
+            --bg: #FDFBF7;
+            --white: #E5E7EB;
+            --bronze: #CD7F32;
+            --gold: #DAA520;
+            --platinum: #808080;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #F5F0E6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 25px;
+        }
+        .config-panel {
+            background: #F0E6D2;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .config-item {
+            margin: 5px 10px;
+        }
+        label {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        input[type="date"] {
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        .result-panel {
+            display: flex;
+            justify-content: space-between;
+            background: #FFF;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 5px solid var(--primary);
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .rank-display {
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+        }
+        .rank-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            color: white;
+            margin-left: 10px;
+            font-size: 18px;
+        }
+        .count-display {
+            font-size: 18px;
+            text-align: right;
+            line-height: 1.5;
+        }
+        .count-num {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--primary);
+        }
+        .calendar-container {
+            margin-bottom: 20px;
+        }
+        .calendar-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--primary);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+        }
+        .grid-header {
+            font-weight: bold;
+            text-align: center;
+            padding: 5px;
+            background: #E6DDC4;
+            border-radius: 4px;
+        }
+        .day {
+            background: #FFF;
+            border: 1px solid #E6DDC4;
+            border-radius: 4px;
+            padding: 10px 5px;
+            text-align: center;
+            cursor: pointer;
+            position: relative;
+            min-height: 50px;
+            transition: all 0.2s;
+        }
+        .day:hover {
+            background: #FFF9E6;
+        }
+        .day.empty {
+            background: #F3F3F3;
+            cursor: default;
+        }
+        .day.target-range {
+            background: #FFF5E6;
+            border: 1px solid #FFB84D;
+        }
+        .day.today {
+            border: 2px solid #FF4500 !important;
+            background: #FFE6E6;
+            font-weight: bold;
+        }
+        .day .visit-mark {
+            display: none;
+            background: #FF6347;
+            color: white;
+            font-size: 10px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            margin-top: 5px;
+        }
+        .day.visited {
+            background: #FFEBE6;
+        }
+        .day.visited .visit-mark {
+            display: block;
+        }
+        .day.visited.target-range {
+            background: #FFD9B3;
+        }
+        .legend {
+            display: flex;
+            justify-content: flex-start;
+            gap: 15px;
+            font-size: 12px;
+            margin-top: 10px;
+            color: #666;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-box {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+        }
+        .instructions {
+            background: #FFF;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.6;
+            border-top: 3px solid #666;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>♨ サウナ会員ランクシミュレーター</h1>
+    <div class="subtitle">〜 過去1ヶ月（30日間）移動累計方式 〜</div>
+
+    <div class="config-panel">
+        <div class="config-item">
+            <label for="today-input">基準日（今日）：</label>
+            <input type="date" id="today-input" value="2026-06-09" onchange="updateSimulation()">
+        </div>
+        <button onclick="clearVisits()" style="padding: 5px 10px; cursor: pointer; border-radius: 4px; border: 1px solid #999;">来店記録を全リセット</button>
+    </div>
+
+    <div class="result-panel">
+        <div class="rank-display">
+            現在の判定：<span id="rank-badge" class="rank-badge">ホワイト</span>
+        </div>
+        <div class="count-display">
+            判定対象期間内の来店：<span id="count-num" class="count-num">0</span> 回<br>
+            <small style="color: #666;" id="period-text">（対象期間：-- 〜 --）</small>
+        </div>
+    </div>
+
+    <div class="calendar-container">
+        <div class="calendar-header" id="calendar-month-year">2026年6月</div>
+        <div class="grid" id="calendar-grid">
+            </div>
+        
+        <div class="legend">
+            <div class="legend-item"><div class="legend-box" style="border: 2px solid #FF4500; background: #FFE6E6;"></div>基準日（今日）</div>
+            <div class="legend-item"><div class="legend-box" style="background: #FFF5E6; border: 1px solid #FFB84D;"></div>過去1ヶ月の判定範囲</div>
+            <div class="legend-item"><div class="legend-box" style="background: #FF6347;"></div>来店記録あり</div>
+        </div>
+    </div>
+
+    <div class="instructions">
+        <strong>💡 シミュレーターの使い方・確認ポイント:</strong>
+        <ol style="margin: 5px 0 0 20px; padding: 0;">
+            <li>カレンダーの好きな日付をタップ（クリック）すると、その日の<strong>来店履歴（＋1回）</strong>を記録・消去できます。</li>
+            <li>「基準日（今日）」を変更すると、オレンジ色の<strong>「過去1ヶ月の判定範囲」が毎日1日ずつスライドする動き</strong>を追体験できます。</li>
+            <li>基準日を翌日に進めたとき、範囲から外れた古い来店（左端）がノーカウントになり、来店回数が減る（またはランクが下がる）挙動を確認してください。</li>
+        </ol>
+    </div>
+</div>
+
+<script>
+    // モックデータ用の来店記録（YYYY-MM-DDの配列）
+    // 初期値としていくつか設定
+    let visitedDates = new Set(['2026-05-15', '2026-05-28', '2026-06-02']);
+
+    // カレンダーは固定で2026年5月と6月を表示（ローリングが分かりやすいように跨ぎを表現）
+    const simulationYear = 2026;
+    
+    function init() {
+        updateSimulation();
+    }
+
+    function toggleVisit(dateStr) {
+        if (visitedDates.has(dateStr)) {
+            visitedDates.delete(dateStr);
+        } else {
+            visitedDates.add(dateStr);
+        }
+        updateSimulation();
+    }
+
+    function clearVisits() {
+        visitedDates.clear();
+        updateSimulation();
+    }
+
+    function updateSimulation() {
+        const todayInput = document.getElementById('today-input').value;
+        const today = new Date(todayInput);
+        
+        // 過去1ヶ月（30日前までを対象とする）
+        const startDate = new Date(today);
+        startDate.setDate(today.getDate() - 30);
+
+        // 期間テキスト更新
+        document.getElementById('period-text').innerText = `（対象期間：${formatDate(startDate)} 〜 ${formatDate(today)}）`;
+
+        // カレンダーの再描画（基準月は今日入力された月をベースにする）
+        renderCalendar(today.getFullYear(), today.getMonth(), today, startDate);
+
+        // カウント＆ランク判定
+        let matchCount = 0;
+        visitedDates.forEach(dateStr => {
+            const d = new Date(dateStr);
+            // 過去30日以内で、かつ「今日」以前のもの
+            if (d >= startDate && d <= today) {
+                matchCount++;
+            }
+        });
+
+        document.getElementById('count-num').innerText = matchCount;
+
+        // ランク割り当て
+        const badge = document.getElementById('rank-badge');
+        if (matchCount >= 10) {
+            badge.innerText = 'プラチナ 👑';
+            badge.style.backgroundColor = 'var(--platinum)';
+        } else if (matchCount >= 6) {
+            badge.innerText = 'ゴールド 🎖️';
+            badge.style.backgroundColor = 'var(--gold)';
+        } else if (matchCount >= 2) {
+            badge.innerText = 'ブロンズ 🥉';
+            badge.style.backgroundColor = 'var(--bronze)';
+        } else {
+            badge.innerText = 'ホワイト 🥚';
+            badge.style.backgroundColor = '#9CA3AF';
+        }
+    }
+
+    function renderCalendar(year, month, todayObj, startObj) {
+        const grid = document.getElementById('calendar-grid');
+        grid.innerHTML = '';
+        
+        document.getElementById('calendar-month-year').innerText = `${year}年 ${month + 1}月 前後`;
+
+        // 曜日のヘッダー
+        const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+        weekdays.forEach(w => {
+            const h = document.createElement('div');
+            h.className = 'grid-header';
+            h.innerText = w;
+            grid.appendChild(h);
+        });
+
+        // 視覚的にわかりやすくするため、表示中の月の「前月1日」から「当月末」までを連続して出す簡易ロジック
+        // 今回は固定で5月1日〜6月30日までの連続カレンダーを作成します
+        const startCalendar = new Date(2026, 4, 1); // 5月1日
+        const endCalendar = new Date(2026, 5, 30);  // 6月30日
+
+        // 5月1日の曜日を合わせるための空白詰め
+        const startDayOfWeek = startCalendar.getDay();
+        for (let i = 0; i < startDayOfWeek; i++) {
+            const empty = document.createElement('div');
+            empty.className = 'day empty';
+            grid.appendChild(empty);
+        }
+
+        // 5/1から6/30までループ
+        let currentLoopDate = new Date(startCalendar);
+        while (currentLoopDate <= endCalendar) {
+            const dateStr = currentLoopDate.toISOString().split('T')[0];
+            const dayCell = document.createElement('div');
+            dayCell.className = 'day';
+            
+            // 日付と月の簡易テキスト
+            dayCell.innerHTML = `<span style="font-size:10px;color:#999;">${currentLoopDate.getMonth()+1}/</span><br><strong>${currentLoopDate.getDate()}</strong><div class="visit-mark">♨ 来店</div>`;
+            
+            const cellDate = new Date(currentLoopDate);
+            dayCell.onclick = () => toggleVisit(dateStr);
+
+            // ステート付与
+            if (visitedDates.has(dateStr)) dayCell.classList.add('visited');
+            if (cellDate >= startObj && cellDate <= todayObj) dayCell.classList.add('target-range');
+            if (cellDate.toDateString() === todayObj.toDateString()) dayCell.classList.add('today');
+
+            grid.appendChild(dayCell);
+            currentLoopDate.setDate(currentLoopDate.getDate() + 1);
+        }
+    }
+
+    function formatDate(date) {
+        return `${date.getMonth() + 1}/${date.getDate()}`;
+    }
+
+    window.onload = init;
+</script>
+
+</body>
+</html>
